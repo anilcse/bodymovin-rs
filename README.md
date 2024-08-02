@@ -110,6 +110,8 @@ To format the code, run:
 cargo fmt
 ```
 
+## Usage
+
 To use this library, add the following to your `Cargo.toml`:
 
 ```toml
@@ -119,8 +121,6 @@ num-rational = "0.4" # Or the latest version
 rayon = "1.7" # Or the latest version
 serde = { version = "1.0", features = ["derive"] }
 ```
-
-## Usage
 
 Below is a basic example demonstrating how to render frames from Bodymovin JSON and convert them into video frames:
 
