@@ -12,6 +12,106 @@
 
 ## Installation
 
+## Installation
+
+
+### Installing Rust on macOS
+
+To install Rust on macOS, follow these steps:
+
+1. **Install Homebrew** (if you don't already have it):
+
+    Open a terminal and run:
+
+    ```sh
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    ```
+
+2. **Install Rust using Homebrew**:
+
+    ```sh
+    brew install rust
+    ```
+
+3. **Verify the installation**:
+
+    ```sh
+    rustc --version
+    ```
+
+    You should see the Rust version printed in the terminal.
+
+### Installing Rust on Linux
+
+To install Rust on Linux, follow these steps:
+
+1. **Install Rust using rustup**:
+
+    Open a terminal and run:
+
+    ```sh
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    ```
+
+    Follow the on-screen instructions to complete the installation.
+
+2. **Configure your current shell**:
+
+    ```sh
+    source $HOME/.cargo/env
+    ```
+
+3. **Verify the installation**:
+
+    ```sh
+    rustc --version
+    ```
+
+    You should see the Rust version printed in the terminal.
+
+#### Updating Rust
+
+To update Rust to the latest version, run:
+
+```sh
+rustup update
+```
+
+## Build
+
+To build the project, run:
+
+```sh
+cargo build
+```
+
+## Run
+
+To run the project, run:
+
+```sh
+cargo run
+```
+
+## Test
+
+To test the project, run:
+
+```sh
+cargo test
+```
+
+
+## Formatting
+
+To format the code, run:
+
+```sh
+cargo fmt
+```
+
+## Usage
+
 To use this library, add the following to your `Cargo.toml`:
 
 ```toml
@@ -21,8 +121,6 @@ num-rational = "0.4" # Or the latest version
 rayon = "1.7" # Or the latest version
 serde = { version = "1.0", features = ["derive"] }
 ```
-
-## Usage
 
 Below is a basic example demonstrating how to render frames from Bodymovin JSON and convert them into video frames:
 
