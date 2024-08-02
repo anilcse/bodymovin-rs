@@ -296,11 +296,18 @@ pub fn save_frame(
   Ok(())
 }
 
+
+// Type alias for the image buffer
+type RgbaImageBuffer = ImageBuffer<Rgba<u8>, Vec<u8>>;
+
+// Type alias for the result
+type FrameResult = Result<Vec<RgbaImageBuffer>, BodymovinError>;
+
 // Public function to render all frames
 pub fn get_all_frames(
   bodymovin_json: &str,
   assets_dir: &str,
-) -> Result<Vec<ImageBuffer<Rgba<u8>, Vec<u8>>>, BodymovinError> {
+) -> FrameResult {
   let animation_data = load_bodymovin_json(bodymovin_json)?;
   let assets = load_assets(assets_dir, &animation_data)?;
   let layers = parse_layers(&animation_data)?;
@@ -310,7 +317,7 @@ pub fn get_all_frames(
   let total_frames = animation_data["op"].as_f64().unwrap_or(0.0) as u32;
 
   // Render frames in parallel and collect them into a vector
-  let frames: Result<Vec<ImageBuffer<Rgba<u8>, Vec<u8>>>, BodymovinError> = (0..total_frames)
+  let frames: FrameResult = (0..total_frames)
     .into_par_iter()
     .map(|frame_number| {
       let frame = render_frame(width, height, &assets, &layers, frame_number);
