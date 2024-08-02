@@ -1,7 +1,11 @@
 [package]
-name = "bodymovin-loader"
+name = "bodymovin"
 version = "0.1.0"
 edition = "2021"
+
+[lib]
+name = "bodymovin"
+path = "src/lib.rs"
 
 [dependencies]
 serde_json = "1.0"
@@ -10,4 +14,6 @@ imageproc = "0.23.0"
 rand = "0.8"
 num-rational = "0.4.2"
 rayon = "1.10.0"
-float-cmp = "0.9.0"
+
+[dev-dependencies]
+tempfile = "3"  # Or the latest version
