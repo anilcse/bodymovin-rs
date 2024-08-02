@@ -1,2 +1,5 @@
 /target
 .DS_Store
+/output_frames
+/output
+/lottie-rs
