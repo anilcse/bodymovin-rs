@@ -296,7 +296,6 @@ pub fn save_frame(
   Ok(())
 }
 
-
 // Type alias for the image buffer
 type RgbaImageBuffer = ImageBuffer<Rgba<u8>, Vec<u8>>;
 
@@ -304,10 +303,7 @@ type RgbaImageBuffer = ImageBuffer<Rgba<u8>, Vec<u8>>;
 type FrameResult = Result<Vec<RgbaImageBuffer>, BodymovinError>;
 
 // Public function to render all frames
-pub fn get_all_frames(
-  bodymovin_json: &str,
-  assets_dir: &str,
-) -> FrameResult {
+pub fn get_all_frames(bodymovin_json: &str, assets_dir: &str) -> FrameResult {
   let animation_data = load_bodymovin_json(bodymovin_json)?;
   let assets = load_assets(assets_dir, &animation_data)?;
   let layers = parse_layers(&animation_data)?;
