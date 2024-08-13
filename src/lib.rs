@@ -47,10 +47,11 @@ impl Mul<f32> for Vec2 {
     Vec2::new(self.x * scalar, self.y * scalar)
   }
 }
+
 struct Layer {
   start_frame: f32,
   end_frame: f32,
-  transform: Transform,
+  transform: Value,
   asset_id: Option<String>,
 }
 
@@ -58,12 +59,13 @@ struct Asset {
   image: Arc<DynamicImage>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Transform {
-  position: Vec2,
-  scale: Vec2,
-  opacity: f32,
-  rotation: f32,
+    position: Vec2,
+    anchor_point: Vec2,
+    scale: Vec2,
+    rotation: f32,
+    opacity: f32,
 }
 
 impl fmt::Display for BodymovinError {
@@ -128,163 +130,249 @@ fn load_assets(
   Ok(assets)
 }
 
+
 fn render_frame(
   width: u32,
   height: u32,
   assets: &HashMap<String, Asset>,
   layers: &[Layer],
   frame_number: u32,
-) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
+) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>, BodymovinError> {
   let mut image = ImageBuffer::new(width, height);
 
   for layer in layers.iter().rev() {
-    if frame_number as f32 >= layer.start_frame && frame_number as f32 <= layer.end_frame {
-      if let Some(asset_id) = &layer.asset_id {
-        if let Some(asset) = assets.get(asset_id) {
-          composite_layer(&mut image, &asset.image, &layer.transform);
-        }
+      if frame_number as f32 >= layer.start_frame && frame_number as f32 <= layer.end_frame {
+          if let Some(asset_id) = &layer.asset_id {
+              if let Some(asset) = assets.get(asset_id) {
+                  let transform = parse_transform(&layer.transform, frame_number as f32)?;
+                  composite_layer(&mut image, &asset.image, &transform);
+              }
+          }
       }
-    }
   }
 
-  image
+  Ok(image)
 }
 
 fn composite_layer(
-  base_image: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
-  layer_image: &DynamicImage,
-  transform: &Transform,
+    base_image: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
+    layer_image: &DynamicImage,
+    transform: &Transform,
 ) {
-  let (width, height) = layer_image.dimensions();
-  let scaled_width = (width as f32 * transform.scale.x) as u32;
-  let scaled_height = (height as f32 * transform.scale.y) as u32;
+    let (width, height) = layer_image.dimensions();
 
-  let mut resized_image = layer_image.resize(
-    scaled_width,
-    scaled_height,
-    image::imageops::FilterType::Lanczos3,
-  );
+    println!("scale:{:?}", transform.scale);
+    let mut scale = transform.scale;
 
-  // Apply rotation
-  if transform.rotation != 0.0 {
-    resized_image = DynamicImage::ImageRgba8(rotate_about_center(
-      &resized_image.to_rgba8(),
-      transform.rotation.to_radians(),
-      imageproc::geometric_transformations::Interpolation::Bilinear,
-      Rgba([0, 0, 0, 0]),
-    ));
-  }
-
-  // Calculate position
-  let x = transform.position.x - (scaled_width as f32 / 2.0);
-  let y = transform.position.y - (scaled_height as f32 / 2.0);
-
-  // Overlay the image
-  image::imageops::overlay(base_image, &resized_image, x as i64, y as i64);
-
-  // Apply opacity
-  if transform.opacity < 1.0 {
-    for pixel in base_image.pixels_mut() {
-      let alpha = (pixel[3] as f32 * transform.opacity) as u8;
-      *pixel = Rgba([pixel[0], pixel[1], pixel[2], alpha]);
+    if scale.x.abs() < 1.0 {
+      scale.x = 1.0;
+      scale.y = 1.0;
     }
-  }
+
+    let scaled_width = (width as f32 * scale.x.abs()) as u32;
+    let scaled_height = (height as f32 * scale.y.abs()) as u32;
+
+    let mut resized_image = layer_image.resize(
+        scaled_width,
+        scaled_height,
+        image::imageops::FilterType::Lanczos3,
+    );
+
+    if transform.rotation != 0.0 {
+        resized_image = DynamicImage::ImageRgba8(rotate_about_center(
+            &resized_image.to_rgba8(),
+            transform.rotation.to_radians(),
+            imageproc::geometric_transformations::Interpolation::Bilinear,
+            Rgba([0, 0, 0, 0]),
+        ));
+    }
+
+    // Calculate the top-left corner position
+    let anchor_x = transform.anchor_point.x ;
+    let anchor_y = transform.anchor_point.y ;
+    let x = transform.position.x - anchor_x;
+    let y = transform.position.y - anchor_y;
+    
+
+    image::imageops::overlay(base_image, &resized_image, x as i64, y as i64);
+
+    if transform.opacity < 1.0 {
+        for pixel in base_image.pixels_mut() {
+            let alpha = (pixel[3] as f32 * transform.opacity) as u8;
+            *pixel = Rgba([pixel[0], pixel[1], pixel[2], alpha]);
+        }
+    }
 }
 
 fn parse_vec2(v: &Value) -> Vec2 {
   if v.is_array() {
-    Vec2 {
-      x: v[0].as_f64().unwrap_or(0.0) as f32,
-      y: v[1].as_f64().unwrap_or(0.0) as f32,
-    }
+      Vec2 {
+          x: v[0].as_f64().unwrap_or(0.0) as f32,
+          y: v[1].as_f64().unwrap_or(0.0) as f32,
+      }
   } else if v.is_object() {
-    Vec2 {
-      x: v["x"].as_f64().unwrap_or(0.0) as f32,
-      y: v["y"].as_f64().unwrap_or(0.0) as f32,
-    }
+      Vec2 {
+          x: v["x"].as_f64().unwrap_or(0.0) as f32,
+          y: v["y"].as_f64().unwrap_or(0.0) as f32,
+      }
   } else {
-    Vec2 { x: 0.0, y: 0.0 }
+      Vec2 { x: 0.0, y: 0.0 }
   }
 }
 
-fn parse_scale(v: &Value) -> Vec2 {
-  let scale = if v.is_array() {
-    Vec2 {
-      x: v[0].as_f64().unwrap_or(100.0) as f32,
-      y: v[1].as_f64().unwrap_or(100.0) as f32,
-    }
-  } else if v.is_object() {
-    Vec2 {
-      x: v["x"].as_f64().unwrap_or(100.0) as f32,
-      y: v["y"].as_f64().unwrap_or(100.0) as f32,
-    }
+fn parse_transform(transform_data: &Value, frame: f32) -> Result<Transform, BodymovinError> {
+  let position = if let Some(p) = transform_data.get("p") {
+      if p["a"].as_i64().unwrap_or(0) == 1 {
+          // Animated position
+          interpolate_vec2(&p["k"], frame)
+      } else {
+          // Static position
+          parse_vec2(&p["k"])
+      }
   } else {
-    Vec2 { x: 100.0, y: 100.0 }
+      Vec2 { x: 0.0, y: 0.0 }
   };
 
-  Vec2 {
-    x: scale.x / 100.0,
-    y: scale.y / 100.0,
+  let scale = if let Some(s) = transform_data.get("s") {
+      if s["a"].as_i64().unwrap_or(0) == 1 {
+          // Animated scale
+          let scale_vec = interpolate_vec2(&s["k"], frame);
+          Vec2 {
+              x: scale_vec.x / 100.0,
+              y: scale_vec.y / 100.0,
+          }
+      } else {
+          // Static scale
+          let scale_vec = parse_vec2(&s["k"]);
+          Vec2 {
+              x: scale_vec.x / 100.0,
+              y: scale_vec.y / 100.0,
+          }
+      }
+  } else {
+      Vec2 { x: 1.0, y: 1.0 }
+  };
+
+  let anchor_point = if let Some(a) = transform_data.get("a") {
+    if a["a"].as_i64().unwrap_or(0) == 1 {
+        // Animated anchor point
+        interpolate_vec2(&a["k"], frame)
+    } else {
+        // Static anchor point
+        parse_vec2(&a["k"])
+    }
+} else {
+    Vec2 { x: 0.0, y: 0.0 }
+};
+
+  let rotation = if let Some(r) = transform_data.get("r") {
+      if r["a"].as_i64().unwrap_or(0) == 1 {
+          // Animated rotation
+          interpolate_f32(&r["k"], frame)
+      } else {
+          // Static rotation
+          r["k"].as_f64().unwrap_or(0.0) as f32
+      }
+  } else {
+      0.0
+  };
+
+  let opacity = if let Some(o) = transform_data.get("o") {
+      if o["a"].as_i64().unwrap_or(0) == 1 {
+          // Animated opacity
+          (interpolate_f32(&o["k"], frame) / 100.0).clamp(0.0, 1.0)
+      } else {
+          // Static opacity
+          (o["k"].as_f64().unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0)
+      }
+  } else {
+      1.0
+  };
+
+  Ok(Transform {
+      position,
+      anchor_point,
+      scale,
+      rotation,
+      opacity,
+  })
+}
+
+fn interpolate_vec2(keyframes: &Value, frame: f32) -> Vec2 {
+  if let Some(keyframes_array) = keyframes.as_array() {
+      // Find the keyframes before and after the current frame
+      let mut prev_keyframe = &keyframes_array[0];
+      let mut next_keyframe = &keyframes_array[0];
+
+      for keyframe in keyframes_array {
+          if keyframe["t"].as_f64().unwrap_or(0.0) as f32 <= frame {
+              prev_keyframe = keyframe;
+          } else {
+              next_keyframe = keyframe;
+              break;
+          }
+      }
+
+      let start_time = prev_keyframe["t"].as_f64().unwrap_or(0.0) as f32;
+      let end_time = next_keyframe["t"].as_f64().unwrap_or(0.0) as f32;
+      let progress = (frame - start_time) / (end_time - start_time);
+
+      let start_value = parse_vec2(&prev_keyframe["s"]);
+      let end_value = parse_vec2(&next_keyframe["e"]);
+
+      Vec2 {
+          x: start_value.x + (end_value.x - start_value.x) * progress,
+          y: start_value.y + (end_value.y - start_value.y) * progress,
+      }
+  } else {
+      parse_vec2(keyframes)
+  }
+}
+
+fn interpolate_f32(keyframes: &Value, frame: f32) -> f32 {
+  if let Some(keyframes_array) = keyframes.as_array() {
+      // Find the keyframes before and after the current frame
+      let mut prev_keyframe = &keyframes_array[0];
+      let mut next_keyframe = &keyframes_array[0];
+
+      for keyframe in keyframes_array {
+          if keyframe["t"].as_f64().unwrap_or(0.0) as f32 <= frame {
+              prev_keyframe = keyframe;
+          } else {
+              next_keyframe = keyframe;
+              break;
+          }
+      }
+
+      let start_time = prev_keyframe["t"].as_f64().unwrap_or(0.0) as f32;
+      let end_time = next_keyframe["t"].as_f64().unwrap_or(0.0) as f32;
+      let progress = (frame - start_time) / (end_time - start_time);
+
+      let start_value = prev_keyframe["s"][0].as_f64().unwrap_or(0.0) as f32;
+      let end_value = next_keyframe["e"][0].as_f64().unwrap_or(0.0) as f32;
+
+      start_value + (end_value - start_value) * progress
+  } else {
+      keyframes.as_f64().unwrap_or(0.0) as f32
   }
 }
 
 fn parse_layers(animation_data: &Value) -> Result<Vec<Layer>, BodymovinError> {
   animation_data["layers"]
-    .as_array()
-    .ok_or_else(|| BodymovinError::OtherError("No layers found".to_string()))?
-    .iter()
-    .map(|layer| {
-      Ok(Layer {
-        start_frame: layer["ip"].as_f64().unwrap_or(0.0) as f32,
-        end_frame: layer["op"].as_f64().unwrap_or(0.0) as f32,
-        transform: parse_transform(&layer["ks"])?,
-        asset_id: layer["refId"].as_str().map(String::from),
+      .as_array()
+      .ok_or_else(|| BodymovinError::OtherError("No layers found".to_string()))?
+      .iter()
+      .map(|layer| {
+          Ok(Layer {
+              start_frame: layer["ip"].as_f64().unwrap_or(0.0) as f32,
+              end_frame: layer["op"].as_f64().unwrap_or(0.0) as f32,
+              transform: layer["ks"].clone(),
+              asset_id: layer["refId"].as_str().map(String::from),
+          })
       })
-    })
-    .collect()
+      .collect()
 }
 
-fn parse_transform(transform_data: &Value) -> Result<Transform, BodymovinError> {
-  //println!("Raw transform data: {:?}", transform_data);
-
-  let position = if transform_data["p"].is_object() {
-    parse_vec2(&transform_data["p"]["k"])
-  } else {
-    parse_vec2(&transform_data["p"])
-  };
-
-  let scale = if transform_data["s"].is_object() {
-    parse_scale(&transform_data["s"]["k"])
-  } else {
-    parse_scale(&transform_data["s"])
-  };
-
-  let rotation = if transform_data["r"].is_object() {
-    transform_data["r"]["k"].as_f64().unwrap_or(0.0) as f32
-  } else {
-    transform_data["r"].as_f64().unwrap_or(0.0) as f32
-  };
-
-  let opacity = if transform_data["o"].is_object() {
-    transform_data["o"]["k"].as_f64().unwrap_or(100.0) as f32
-  } else {
-    transform_data["o"].as_f64().unwrap_or(100.0) as f32
-  };
-
-  // Ensure opacity is between 0 and 1
-  let opacity = (opacity / 100.0).clamp(0.0, 1.0);
-
-  //println!("Parsed transform: position: {:?}, scale: {:?}, rotation: {}, opacity: {}", position, scale, rotation, opacity);
-
-  Ok(Transform {
-    position,
-    scale,
-    rotation,
-    opacity,
-  })
-}
-
-// Save a frame to disk
 pub fn save_frame(
   frame: &ImageBuffer<Rgba<u8>, Vec<u8>>,
   output_dir: &str,
@@ -292,18 +380,11 @@ pub fn save_frame(
 ) -> Result<(), BodymovinError> {
   let file_name = format!("frame_{:04}.png", frame_number);
   let path = Path::new(output_dir).join(file_name);
-  frame.save(path)?;
+  frame.save(path).map_err(BodymovinError::ImageError)?;
   Ok(())
 }
 
-// Type alias for the image buffer
-type RgbaImageBuffer = ImageBuffer<Rgba<u8>, Vec<u8>>;
-
-// Type alias for the result
-type FrameResult = Result<Vec<RgbaImageBuffer>, BodymovinError>;
-
-// Public function to render all frames
-pub fn get_all_frames(bodymovin_json: &str, assets_dir: &str) -> FrameResult {
+pub fn get_all_frames(bodymovin_json: &str, assets_dir: &str) -> Result<Vec<ImageBuffer<Rgba<u8>, Vec<u8>>>, BodymovinError> {
   let animation_data = load_bodymovin_json(bodymovin_json)?;
   let assets = load_assets(assets_dir, &animation_data)?;
   let layers = parse_layers(&animation_data)?;
@@ -313,13 +394,10 @@ pub fn get_all_frames(bodymovin_json: &str, assets_dir: &str) -> FrameResult {
   let total_frames = animation_data["op"].as_f64().unwrap_or(0.0) as u32;
 
   // Render frames in parallel and collect them into a vector
-  let frames: FrameResult = (0..total_frames)
-    .into_par_iter()
-    .map(|frame_number| {
-      let frame = render_frame(width, height, &assets, &layers, frame_number);
-      Ok(frame)
-    })
-    .collect();
+  let frames: Result<Vec<_>, _> = (0..total_frames)
+      .into_par_iter()
+      .map(|frame_number| render_frame(width, height, &assets, &layers, frame_number))
+      .collect();
 
   frames
 }
